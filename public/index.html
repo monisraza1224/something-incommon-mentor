@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>somethingincommon/mentor</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Simple branding -->
+    <div class="brand">
+        somethingincommon/mentor
+    </div>
+
+    <!-- Chatbot Widget -->
+    <div class="chat-widget" id="chatWidget">
+        <!-- Chat Header -->
+        <div class="chat-header" id="chatHeader">
+            <div class="header-title">
+                <span class="title-icon">🌿</span>
+                <span class="title-text">AI Mentor</span>
+            </div>
+            <div class="header-controls">
+                <span class="status-dot"></span>
+                <button class="toggle-chat" id="toggleChat">−</button>
+            </div>
+        </div>
+
+        <!-- Chat Messages -->
+        <div class="chat-messages" id="chatMessages"></div>
+
+        <!-- Chat Input -->
+        <div class="chat-input-area">
+            <textarea 
+                class="chat-input" 
+                id="chatInput" 
+                placeholder="Type your message..."
+                rows="1"
+            ></textarea>
+            <button class="send-button" id="sendButton">
+                <span class="send-icon">→</span>
+            </button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
