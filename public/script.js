@@ -16,7 +16,7 @@ class Chatbot {
 
     addWelcomeMessage() {
         setTimeout(() => {
-            this.addMessage("I'm here. Take your time.", 'bot');
+            this.addMessage("Hi! How are you doing today?", 'bot');
         }, 500);
     }
 

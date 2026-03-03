@@ -301,11 +301,11 @@ app.post('/api/chat', async (req, res) => {
       return res.json({ response: "What's happened since we last spoke?" });
     }
 
-    // Get AI response
+    // Get AI response with UPDATED model and temperature
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4o',              // Updated to latest model
       messages: conversationHistory,
-      temperature: 0.7,
+      temperature: 0.65,             // Updated to 0.65
       max_tokens: 500
     });
 
@@ -329,6 +329,16 @@ app.post('/api/chat', async (req, res) => {
   } catch (error) {
     console.error('OpenAI API Error:', error);
     res.status(500).json({ error: 'Failed to get response' });
+  }
+});
+
+// Serve static files in production
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Handle SPA routing - serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
   }
 });
 
