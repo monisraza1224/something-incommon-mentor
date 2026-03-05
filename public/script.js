@@ -4,6 +4,7 @@ class Chatbot {
         this.isMinimized = false;
         this.isTyping = false;
         this.messageCount = 0;
+        this.sessionActive = true;  // Track if session is active
         this.init();
     }
 
@@ -16,7 +17,7 @@ class Chatbot {
 
     addWelcomeMessage() {
         setTimeout(() => {
-            this.addMessage("Hi! How are you doing today?", 'bot');
+            this.addMessage("How are you doing today?", 'bot');
         }, 500);
     }
 
@@ -73,25 +74,62 @@ class Chatbot {
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
     }
 
+    disableInput(permanent = false) {
+        this.input.disabled = true;
+        this.sendBtn.disabled = true;
+        this.input.placeholder = permanent ? "Session ended" : "Waiting for response...";
+        if (permanent) {
+            this.sessionActive = false;
+        }
+    }
+
+    enableInput() {
+        if (this.sessionActive) {
+            this.input.disabled = false;
+            this.sendBtn.disabled = false;
+            this.input.placeholder = "Type your message...";
+        }
+    }
+
     async sendMessage() {
         const message = this.input.value.trim();
-        if (!message || this.isTyping) return;
+        if (!message || this.isTyping || !this.sessionActive) return;
 
         this.input.value = '';
         this.input.style.height = 'auto';
         
         this.addMessage(message, 'user');
         this.showTypingIndicator();
+        this.disableInput();
         this.scrollToBottom();
         
         try {
             const response = await this.getBotResponse(message);
             this.removeTypingIndicator();
-            this.addMessage(response, 'bot');
+            
+            // Check if session was terminated (crisis)
+            if (response.crisis || response.terminate) {
+                this.addMessage(response.response || response, 'bot');
+                this.disableInput(true); // Permanently disable input
+                this.scrollToBottom();
+                return;
+            }
+            
+            // Check if session ended naturally
+            if (response.session_ended) {
+                this.addMessage(response.response, 'bot');
+                this.disableInput(true);
+                this.scrollToBottom();
+                return;
+            }
+            
+            this.addMessage(response.response || response, 'bot');
+            this.enableInput();
             this.scrollToBottom();
         } catch (error) {
             this.removeTypingIndicator();
             this.addMessage('I apologize, but I\'m having trouble connecting. Please try again.', 'bot');
+            this.enableInput();
             this.scrollToBottom();
             console.error('Error:', error);
         }
@@ -113,7 +151,6 @@ class Chatbot {
 
     showTypingIndicator() {
         this.isTyping = true;
-        this.sendBtn.disabled = true;
         
         const typingDiv = document.createElement('div');
         typingDiv.className = 'message bot';
@@ -129,7 +166,6 @@ class Chatbot {
 
     removeTypingIndicator() {
         this.isTyping = false;
-        this.sendBtn.disabled = false;
         
         const indicator = document.getElementById('typingIndicator');
         if (indicator) {
@@ -148,8 +184,7 @@ class Chatbot {
         });
 
         if (!response.ok) throw new Error('Network response was not ok');
-        const data = await response.json();
-        return data.response;
+        return await response.json();
     }
 }
 
