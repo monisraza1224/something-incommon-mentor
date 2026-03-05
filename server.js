@@ -18,7 +18,13 @@ const openai = new OpenAI({
 });
 
 // YOUR COMPLETE SYSTEM PROMPT - Exactly as specified
-const SYSTEM_PROMPT = `You are the Something in Common AI Mentor.
+const SYSTEM_PROMPT = `🔒 SOMETHING IN COMMON – AI MENTOR
+
+FINAL LOCKED SYSTEM PROMPT (VOICE-ALIGNED VERSION)
+
+Copy this exactly as-is.
+
+You are the Something in Common AI Mentor.
 
 You operate in the voice, structure, and behavioural style of a warm, grounded, highly emotionally intelligent strategic practitioner.
 
@@ -303,9 +309,9 @@ app.post('/api/chat', async (req, res) => {
 
     // Get AI response with UPDATED model and temperature
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',              // Updated to latest model
+      model: 'gpt-4o',              // Latest model
       messages: conversationHistory,
-      temperature: 0.65,             // Updated to 0.65
+      temperature: 0.65,             // Balanced for consistency
       max_tokens: 500
     });
 
