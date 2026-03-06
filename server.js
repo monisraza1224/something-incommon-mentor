@@ -71,16 +71,16 @@ const CRISIS_KEYWORDS = [
   'final goodbye'
 ];
 
-// Helper function to check crisis triggers - MORE ROBUST
+// Helper function to check crisis triggers
 function checkCrisisTrigger(message) {
   if (!message || typeof message !== 'string') return false;
   
   const lowerMessage = message.toLowerCase().trim();
   
-  // Direct check for exact matches first
+  // Direct check for exact matches
   for (const keyword of CRISIS_KEYWORDS) {
     if (lowerMessage.includes(keyword)) {
-      console.log(`Crisis detected: "${keyword}" in message: "${message}"`);
+      console.log(`Crisis detected: "${keyword}" in message`);
       return true;
     }
   }
@@ -118,7 +118,42 @@ function detectRelationshipPattern(message) {
   return patterns.some(pattern => pattern.test(message));
 }
 
-// UPDATED SYSTEM PROMPT with all new sections
+// NEW: Response discipline function - enforces 2 sentences max, 1 question max
+function enforceResponseDiscipline(aiResponse) {
+  if (!aiResponse || typeof aiResponse !== 'string') {
+    return "Tell me more.";
+  }
+  
+  // Step 1: Split into sentences (basic splitting by .!? followed by space)
+  const sentences = aiResponse.match(/[^.!?]+[.!?]+/g) || [aiResponse];
+  
+  // Step 2: Keep only first 2 sentences maximum
+  let trimmedResponse = sentences.slice(0, 2).join(' ').trim();
+  
+  // Step 3: If we have more than 2 sentences originally, add a note that we trimmed
+  // (not shown to user, just for debugging)
+  
+  // Step 4: Enforce only ONE question per response
+  const questionMarks = (trimmedResponse.match(/\?/g) || []).length;
+  
+  if (questionMarks > 1) {
+    // Find the position of the first question mark
+    const firstQuestionIndex = trimmedResponse.indexOf('?');
+    if (firstQuestionIndex !== -1) {
+      // Keep everything up to and including the first question mark
+      trimmedResponse = trimmedResponse.substring(0, firstQuestionIndex + 1);
+    }
+  }
+  
+  // Step 5: Final cleanup - ensure response isn't empty
+  if (!trimmedResponse || trimmedResponse.length < 2) {
+    return "Tell me more.";
+  }
+  
+  return trimmedResponse;
+}
+
+// UPDATED SYSTEM PROMPT - slightly adjusted for conciseness
 const SYSTEM_PROMPT = `
 You are the Something in Common AI Mentor.
 
@@ -136,15 +171,23 @@ WARMTH FLOOR:
 Warmth must never drop below 50%.
 You must never sound robotic, clinical, scripted, patronising, overly motivational, preachy, or superior.
 
+CRITICAL RESPONSE RULES:
+- Keep responses VERY concise - maximum 2-3 sentences
+- Ask only ONE question per response
+- Never stack multiple questions
+- Never write long paragraphs
+- Never use therapy-style language
+- Be precise and minimal
+
 You are:
 Warm
 Grounded
 Calm
 Relational
 Clear
-Directive only when appropriate
-Comfortable in nuance
-Comfortable in grey areas
+Concise
+Minimal
+Precise
 
 You do not rapid-fire questions.
 You do not interrogate.
@@ -424,13 +467,15 @@ Warmth must remain consistent.
 
 When uncertain what to do:
 Return to sequence reconstruction.
+
+Remember: Be concise. Maximum 2-3 sentences. Only one question per response.
 `;
 
 // Store conversation history
 const conversations = new Map();
 
 // Helper function to get last N exchanges
-function getLastExchanges(history, count = 15) {
+function getLastExchanges(history, count = 10) {
   const exchanges = [];
   let userCount = 0;
   
@@ -496,7 +541,7 @@ Something in Common does not provide crisis or emergency mental health services.
     
     if (exchangeCount >= 50) {
       return res.json({ 
-        response: "We've covered significant ground in this conversation. It might be useful to let this settle and return to it after some space.",
+        response: "Let this settle. Return when ready.",
         session_ended: true
       });
     }
@@ -508,7 +553,7 @@ Something in Common does not provide crisis or emergency mental health services.
     if (detectRelationshipPattern(message)) {
       conversationHistory.push({
         role: "system",
-        content: "Reminder: Follow sequential questioning protocol. Reconstruct pattern before offering interpretation. Do not reassure prematurely."
+        content: "Reminder: Follow sequential questioning protocol. Reconstruct pattern before offering interpretation. Do not reassure prematurely. Keep responses concise."
       });
     }
 
@@ -529,7 +574,7 @@ Something in Common does not provide crisis or emergency mental health services.
     }
 
     // STEP 5: OPENAI API CALL with updated parameters
-    const lastExchanges = getLastExchanges(conversationHistory, 15);
+    const lastExchanges = getLastExchanges(conversationHistory, 10);
     const messagesForAPI = [
       { role: 'system', content: SYSTEM_PROMPT },
       ...lastExchanges
@@ -538,13 +583,16 @@ Something in Common does not provide crisis or emergency mental health services.
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: messagesForAPI,
-      temperature: 0.45,
-      max_tokens: 700,
+      temperature: 0.4,              // Lowered to 0.4 for less randomness
+      max_tokens: 150,                // Reduced to force shorter responses
       presence_penalty: 0.2,
       frequency_penalty: 0.2
     });
 
-    const aiResponse = completion.choices[0].message.content;
+    let aiResponse = completion.choices[0].message.content;
+
+    // STEP 6: APPLY RESPONSE DISCIPLINE (2 sentences max, 1 question max)
+    aiResponse = enforceResponseDiscipline(aiResponse);
 
     // Add AI response to history
     conversationHistory.push({ 
@@ -553,14 +601,14 @@ Something in Common does not provide crisis or emergency mental health services.
       timestamp: Date.now()
     });
 
-    // STEP 6: SESSION MANAGEMENT - Adaptive wind-down logic
+    // STEP 7: SESSION MANAGEMENT - Adaptive wind-down logic (simplified)
     let finalResponse = aiResponse;
     
     if (exchangeCount >= 25 && exchangeCount <= 30) {
-      finalResponse = aiResponse + "\n\nLet's pause for a moment — what feels most important for you to sit with from this?";
+      finalResponse = "What feels most important to sit with?";
     }
     else if (exchangeCount >= 35 && exchangeCount <= 40) {
-      finalResponse = aiResponse + "\n\nIt might be useful to let this settle and return to it after some space.";
+      finalResponse = "Let this settle. Return when ready.";
     }
 
     res.json({ response: finalResponse });
