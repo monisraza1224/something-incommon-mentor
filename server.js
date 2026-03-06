@@ -17,39 +17,103 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Crisis detection keywords
+// COMPREHENSIVE CRISIS DETECTION KEYWORDS
 const CRISIS_KEYWORDS = [
+  // Suicide direct
   'suicide',
   'kill myself',
   'end my life',
+  'take my life',
+  'commit suicide',
+  
+  // Self-harm
   'self-harm',
   'self harm',
   'hurt myself',
-  "i don't want to live",
+  'cut myself',
+  'harm myself',
+  
+  // Death wish
+  "i want to die",
+  'wish i was dead',
+  'better off dead',
+  'want to die',
+  'i should die',
+  'i deserve to die',
+  'ready to die',
+  'rather be dead',
+  
+  // Hopelessness extreme
+  "i can't go on",
+  'no reason to live',
+  'nothing to live for',
+  'life is not worth living',
   'life isn\'t worth living',
-  'i can\'t go on',
+  'done with life',
+  'give up on life',
+  
+  // Burden
+  'burden to everyone',
   'everyone would be better without me',
+  'better without me',
+  
+  // Harm others
   'kill someone',
   'hurt someone',
   'violent thoughts',
-  'immediate danger'
+  'immediate danger',
+  
+  // Additional phrases
+  'plan to end it',
+  'going to end it',
+  'ending my life',
+  'say goodbye',
+  'final goodbye'
 ];
 
-// Helper function to detect crisis triggers
+// Helper function to check crisis triggers - MORE ROBUST
 function checkCrisisTrigger(message) {
-  const lowerMessage = message.toLowerCase();
-  return CRISIS_KEYWORDS.some(keyword => lowerMessage.includes(keyword));
+  if (!message || typeof message !== 'string') return false;
+  
+  const lowerMessage = message.toLowerCase().trim();
+  
+  // Direct check for exact matches first
+  for (const keyword of CRISIS_KEYWORDS) {
+    if (lowerMessage.includes(keyword)) {
+      console.log(`Crisis detected: "${keyword}" in message: "${message}"`);
+      return true;
+    }
+  }
+  
+  // Check for "i want to X" patterns with dangerous words
+  const dangerousWords = ['die', 'dead', 'kill', 'end', 'death', 'suicide'];
+  if (lowerMessage.includes('i want to') || lowerMessage.includes('i wanna')) {
+    for (const word of dangerousWords) {
+      if (lowerMessage.includes(word)) {
+        console.log(`Crisis detected: "i want to ${word}" pattern`);
+        return true;
+      }
+    }
+  }
+  
+  return false;
 }
 
 // Helper function to detect relationship patterns
 function detectRelationshipPattern(message) {
+  if (!message || typeof message !== 'string') return false;
+  
   const patterns = [
     /wrong guys/i,
     /wrong men/i,
     /always pick/i,
     /same type/i,
     /he changed/i,
-    /red flag/i
+    /red flag/i,
+    /always choose/i,
+    /keep attracting/i,
+    /bad relationships/i,
+    /toxic pattern/i
   ];
   return patterns.some(pattern => pattern.test(message));
 }
@@ -389,10 +453,11 @@ app.post('/api/chat', async (req, res) => {
     const { message, sessionId } = req.body;
     const userId = sessionId || `user-${Date.now()}`;
 
-    // STEP 1: CRISIS DETECTION - HARD STOP
+    // STEP 1: CRISIS DETECTION - HARD STOP (BEFORE ANYTHING ELSE)
     if (checkCrisisTrigger(message)) {
-      return res.json({
-        response: `
+      console.log('CRISIS DETECTED - Returning hard stop response');
+      
+      const crisisResponse = `
 Important Notice
 
 The Something in Common AI Mentor is not able to engage in conversations relating to suicide, self-harm, harm to others, or immediate risk.
@@ -408,7 +473,10 @@ If you are in Australia, contact Lifeline on 13 11 14.
 If you are in Europe, contact emergency services (112) or visit findahelpline.com to locate services in your country.
 
 Something in Common does not provide crisis or emergency mental health services.
-`,
+`;
+
+      return res.json({
+        response: crisisResponse,
         crisis: true,
         terminate: true
       });
@@ -470,10 +538,10 @@ Something in Common does not provide crisis or emergency mental health services.
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: messagesForAPI,
-      temperature: 0.45,              // Updated to 0.45
-      max_tokens: 700,                 // Updated to 700
-      presence_penalty: 0.2,           // New parameter
-      frequency_penalty: 0.2           // New parameter
+      temperature: 0.45,
+      max_tokens: 700,
+      presence_penalty: 0.2,
+      frequency_penalty: 0.2
     });
 
     const aiResponse = completion.choices[0].message.content;
