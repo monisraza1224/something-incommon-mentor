@@ -2,7 +2,6 @@ const express = require('express');
 const OpenAI = require('openai');
 const cors = require('cors');
 const path = require('path');
-const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
 const app = express();
@@ -17,12 +16,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
-
-// Initialize Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
 
 // Crisis detection keywords
 const CRISIS_KEYWORDS = [
@@ -42,18 +35,26 @@ const CRISIS_KEYWORDS = [
   'immediate danger'
 ];
 
-// Crisis response message
-const CRISIS_RESPONSE = `I'm concerned about what you're sharing. These feelings are important, and they deserve real support from someone trained to help.
+// Helper function to detect crisis triggers
+function checkCrisisTrigger(message) {
+  const lowerMessage = message.toLowerCase();
+  return CRISIS_KEYWORDS.some(keyword => lowerMessage.includes(keyword));
+}
 
-Please reach out to a crisis line where someone can be with you right now:
+// Helper function to detect relationship patterns
+function detectRelationshipPattern(message) {
+  const patterns = [
+    /wrong guys/i,
+    /wrong men/i,
+    /always pick/i,
+    /same type/i,
+    /he changed/i,
+    /red flag/i
+  ];
+  return patterns.some(pattern => pattern.test(message));
+}
 
-• National Suicide Prevention Lifeline: 988 or 1-800-273-8255
-• Crisis Text Line: Text HOME to 741741
-• Or go to your nearest emergency room
-
-I'm here for conversations about patterns, agency, and clarity — but when it comes to safety, you deserve a human who's trained for this. Please reach out.`;
-
-// UPDATED SYSTEM PROMPT
+// UPDATED SYSTEM PROMPT with all new sections
 const SYSTEM_PROMPT = `
 You are the Something in Common AI Mentor.
 
@@ -101,6 +102,81 @@ You must first clarify:
 "Tell me what that means."
 
 Only disengage if intent or plan becomes clear.
+
+-------------------------------------
+SEQUENTIAL QUESTIONING PROTOCOL
+-------------------------------------
+
+When a user reveals a repeating relational pattern (e.g., "I always pick the wrong guys"):
+
+You must follow this exact progression:
+
+STEP 1 — PATTERN CLARIFICATION
+Ask:
+- "Walk me through what usually happens."
+- "What draws you in at the start?"
+
+Do not interpret yet.
+
+STEP 2 — SHIFT DETECTION
+Ask:
+- "When did you first notice something felt off?"
+- "What seemed to change?"
+
+STEP 3 — PARTICIPATION EXPOSURE
+Ask:
+- "What did you do when you noticed that?"
+- "How long did you stay once you knew?"
+
+STEP 4 — BELIEF REVEAL
+If user admits overriding themselves:
+Reflect first:
+"So you knew — and stayed."
+
+Then ask:
+"What did you think losing him would mean?"
+
+Do not reassure yet.
+
+STEP 5 — AGENCY REPOSITIONING
+Only after belief is revealed:
+Reposition toward self-trust and boundaries.
+
+Avoid jumping directly to empowerment language.
+Awareness must precede encouragement.
+
+-------------------------------------
+STRUCTURAL PRIORITY RULE
+-------------------------------------
+
+When a user expresses fear, insecurity, or imagined future outcomes:
+
+You must:
+
+Explore the internal image or belief first.
+
+"What are you picturing?"
+
+"What does that look like in your mind?"
+
+"What does that mean to you?"
+
+Clarify the internal narrative before offering reassurance.
+
+Only after belief is surfaced may you gently recalibrate perspective.
+
+Do not begin with:
+
+"That's a common fear…"
+
+"Fear isn't always accurate…"
+
+"Reality often plays out differently…"
+
+Belief must be examined before being softened.
+
+Sequence:
+Image → Meaning → Accuracy → Agency.
 
 -------------------------------------
 MANDATORY RESPONSE HIERARCHY
@@ -286,14 +362,8 @@ When uncertain what to do:
 Return to sequence reconstruction.
 `;
 
-// Store conversation history in memory (temporary, Supabase is permanent storage)
+// Store conversation history
 const conversations = new Map();
-
-// Helper function to check for crisis keywords
-function detectCrisis(message) {
-  const lowerMessage = message.toLowerCase();
-  return CRISIS_KEYWORDS.some(keyword => lowerMessage.includes(keyword));
-}
 
 // Helper function to get last N exchanges
 function getLastExchanges(history, count = 15) {
@@ -319,23 +389,26 @@ app.post('/api/chat', async (req, res) => {
     const { message, sessionId } = req.body;
     const userId = sessionId || `user-${Date.now()}`;
 
-    // STEP 1: CRISIS DETECTION (HIGHEST PRIORITY)
-    const isCrisis = detectCrisis(message);
-    
-    if (isCrisis) {
-      // Store crisis conversation in Supabase
-      await supabase.from('conversations').insert([{
-        user_id: userId,
-        session_id: sessionId,
-        user_message: message,
-        ai_response: CRISIS_RESPONSE,
-        crisis_flag: true,
-        timestamp: new Date().toISOString()
-      }]);
+    // STEP 1: CRISIS DETECTION - HARD STOP
+    if (checkCrisisTrigger(message)) {
+      return res.json({
+        response: `
+Important Notice
 
-      // Return crisis response and terminate
-      return res.json({ 
-        response: CRISIS_RESPONSE,
+The Something in Common AI Mentor is not able to engage in conversations relating to suicide, self-harm, harm to others, or immediate risk.
+
+If you are experiencing thoughts of harming yourself or someone else, or feel unsafe, please seek immediate professional support.
+
+• Contact your local emergency services
+• Reach out to a crisis support service in your country
+• Speak directly with a qualified mental health professional
+
+If you are in the United States, contact the 988 Suicide & Crisis Lifeline (call or text 988).
+If you are in Australia, contact Lifeline on 13 11 14.
+If you are in Europe, contact emergency services (112) or visit findahelpline.com to locate services in your country.
+
+Something in Common does not provide crisis or emergency mental health services.
+`,
         crisis: true,
         terminate: true
       });
@@ -353,7 +426,6 @@ app.post('/api/chat', async (req, res) => {
     // Check exchange count (hard cap at 50)
     const exchangeCount = conversationHistory.filter(msg => msg.role === 'user').length;
     
-    // STEP 5: SESSION MANAGEMENT - Hard cap at 50
     if (exchangeCount >= 50) {
       return res.json({ 
         response: "We've covered significant ground in this conversation. It might be useful to let this settle and return to it after some space.",
@@ -364,32 +436,21 @@ app.post('/api/chat', async (req, res) => {
     // Add user message
     conversationHistory.push({ role: 'user', content: message });
 
-    // STEP 6: MEMORY LOGIC - Store in Supabase
-    await supabase.from('conversations').insert([{
-      user_id: userId,
-      session_id: sessionId,
-      user_message: message,
-      crisis_flag: false,
-      timestamp: new Date().toISOString()
-    }]);
+    // STEP 3: DETECT RELATIONSHIP PATTERNS AND INJECT SEQUENCE REMINDER
+    if (detectRelationshipPattern(message)) {
+      conversationHistory.push({
+        role: "system",
+        content: "Reminder: Follow sequential questioning protocol. Reconstruct pattern before offering interpretation. Do not reassure prematurely."
+      });
+    }
 
-    // STEP 10: CONTINUITY LOGIC - Check if returning user
+    // STEP 4: CONTINUITY LOGIC - Check if returning user
     const timeSinceLastMessage = conversationHistory.length > 2 ? 
       Date.now() - (conversationHistory[conversationHistory.length - 2]?.timestamp || 0) : 0;
     
-    // If more than 1 hour passed and it's a return (has history), use continuity approach
     if (timeSinceLastMessage > 3600000 && conversationHistory.length > 3) {
       const continuityResponse = "What's happened since we last spoke?";
       
-      // Store AI response
-      await supabase.from('conversations').insert([{
-        user_id: userId,
-        session_id: sessionId,
-        ai_response: continuityResponse,
-        crisis_flag: false,
-        timestamp: new Date().toISOString()
-      }]);
-
       conversationHistory.push({ 
         role: 'assistant', 
         content: continuityResponse,
@@ -399,7 +460,7 @@ app.post('/api/chat', async (req, res) => {
       return res.json({ response: continuityResponse });
     }
 
-    // STEP 3: OPENAI API CALL - Get only last 15 exchanges
+    // STEP 5: OPENAI API CALL with updated parameters
     const lastExchanges = getLastExchanges(conversationHistory, 15);
     const messagesForAPI = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -409,8 +470,10 @@ app.post('/api/chat', async (req, res) => {
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: messagesForAPI,
-      temperature: 0.5,           // Updated to 0.5
-      max_tokens: 500
+      temperature: 0.45,              // Updated to 0.45
+      max_tokens: 700,                 // Updated to 700
+      presence_penalty: 0.2,           // New parameter
+      frequency_penalty: 0.2           // New parameter
     });
 
     const aiResponse = completion.choices[0].message.content;
@@ -422,23 +485,12 @@ app.post('/api/chat', async (req, res) => {
       timestamp: Date.now()
     });
 
-    // Store AI response in Supabase
-    await supabase.from('conversations').insert([{
-      user_id: userId,
-      session_id: sessionId,
-      ai_response: aiResponse,
-      crisis_flag: false,
-      timestamp: new Date().toISOString()
-    }]);
-
-    // STEP 5: SESSION MANAGEMENT - Adaptive wind-down logic
+    // STEP 6: SESSION MANAGEMENT - Adaptive wind-down logic
     let finalResponse = aiResponse;
     
-    // At 25-30 exchanges, gentle containment
     if (exchangeCount >= 25 && exchangeCount <= 30) {
       finalResponse = aiResponse + "\n\nLet's pause for a moment — what feels most important for you to sit with from this?";
     }
-    // At 35-40 exchanges, suggest integration
     else if (exchangeCount >= 35 && exchangeCount <= 40) {
       finalResponse = aiResponse + "\n\nIt might be useful to let this settle and return to it after some space.";
     }
