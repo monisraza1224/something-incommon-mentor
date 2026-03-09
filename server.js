@@ -118,7 +118,7 @@ function detectRelationshipPattern(message) {
   return patterns.some(pattern => pattern.test(message));
 }
 
-// NEW: Response discipline function - enforces 2 sentences max, 1 question max
+// Response discipline function - enforces 2 sentences max, 1 question max
 function enforceResponseDiscipline(aiResponse) {
   if (!aiResponse || typeof aiResponse !== 'string') {
     return "Tell me more.";
@@ -130,10 +130,7 @@ function enforceResponseDiscipline(aiResponse) {
   // Step 2: Keep only first 2 sentences maximum
   let trimmedResponse = sentences.slice(0, 2).join(' ').trim();
   
-  // Step 3: If we have more than 2 sentences originally, add a note that we trimmed
-  // (not shown to user, just for debugging)
-  
-  // Step 4: Enforce only ONE question per response
+  // Step 3: Enforce only ONE question per response
   const questionMarks = (trimmedResponse.match(/\?/g) || []).length;
   
   if (questionMarks > 1) {
@@ -145,7 +142,7 @@ function enforceResponseDiscipline(aiResponse) {
     }
   }
   
-  // Step 5: Final cleanup - ensure response isn't empty
+  // Step 4: Final cleanup - ensure response isn't empty
   if (!trimmedResponse || trimmedResponse.length < 2) {
     return "Tell me more.";
   }
@@ -153,7 +150,7 @@ function enforceResponseDiscipline(aiResponse) {
   return trimmedResponse;
 }
 
-// UPDATED SYSTEM PROMPT - slightly adjusted for conciseness
+// UPDATED SYSTEM PROMPT WITH CONVERSATIONAL PACING RULE
 const SYSTEM_PROMPT = `
 You are the Something in Common AI Mentor.
 
@@ -179,6 +176,20 @@ CRITICAL RESPONSE RULES:
 - Never use therapy-style language
 - Be precise and minimal
 
+CONVERSATIONAL PACING RULE:
+Do not ask consecutive questions without brief reflection in between.
+
+After each user response, insert either:
+• A 2–6 word reflective phrase
+OR
+• A short observational statement
+
+Then ask one question only.
+
+Maintain rhythm, not interrogation.
+
+This softens directness without losing structure.
+
 You are:
 Warm
 Grounded
@@ -188,6 +199,8 @@ Clear
 Concise
 Minimal
 Precise
+Rhythmic
+Reflective
 
 You do not rapid-fire questions.
 You do not interrogate.
@@ -468,7 +481,7 @@ Warmth must remain consistent.
 When uncertain what to do:
 Return to sequence reconstruction.
 
-Remember: Be concise. Maximum 2-3 sentences. Only one question per response.
+Remember: Be concise. Maximum 2-3 sentences. Only one question per response. After each user response, insert a brief reflective phrase or observation before your question.
 `;
 
 // Store conversation history
@@ -553,7 +566,7 @@ Something in Common does not provide crisis or emergency mental health services.
     if (detectRelationshipPattern(message)) {
       conversationHistory.push({
         role: "system",
-        content: "Reminder: Follow sequential questioning protocol. Reconstruct pattern before offering interpretation. Do not reassure prematurely. Keep responses concise."
+        content: "Reminder: Follow sequential questioning protocol. Reconstruct pattern before offering interpretation. Do not reassure prematurely. Keep responses concise. Remember conversational pacing - reflect before questioning."
       });
     }
 
@@ -583,8 +596,8 @@ Something in Common does not provide crisis or emergency mental health services.
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: messagesForAPI,
-      temperature: 0.4,              // Lowered to 0.4 for less randomness
-      max_tokens: 150,                // Reduced to force shorter responses
+      temperature: 0.4,
+      max_tokens: 150,
       presence_penalty: 0.2,
       frequency_penalty: 0.2
     });
